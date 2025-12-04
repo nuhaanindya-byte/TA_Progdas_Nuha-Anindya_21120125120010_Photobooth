@@ -22,11 +22,12 @@ timer_input.pack(side="left", padx=5)
 
 # Capture
 Button(
-    top, text="Capture",
+    top,
+    text="Capture",
     command=lambda: setattr(app, "timer", timer_input.get()) or app.start_timer_capture()
 ).pack(side="left", padx=5)
 
-# Clear all
-Button(top, text="Clear Photos", command=app.clear_photos).pack(side="left", padx=5)
+# Clear all photos
+Button(top, text="Clear Photos", command=lambda: [app.photos.clear(), app.photo_paths.clear(), app.display_photos()]).pack(side="left", padx=5)
 
 root.mainloop()
