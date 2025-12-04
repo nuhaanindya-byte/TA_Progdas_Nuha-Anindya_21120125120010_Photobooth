@@ -1,46 +1,45 @@
-import cv2 #mengaktifkan dan mengendalikan kamera, serta memproses gambar/video di Python.
-from PIL import Image, ImageTk #mengubah frame kamera OpenCV menjadi gambar yang bisa ditampilkan di Tkinter.
-import numpy as np #untuk operasi matematika pada gambar (karena frame kamera = array).
-import tkinter as tk #Membuat window (tk.Tk())
-from tkinter import Label, Frame, messagebox #mengambil widget Tkinter spesifik yang sering kamu gunakan.
-import os #untuk mengelola file dan folder.
+import cv2
+import os
+import numpy as np
+from PIL import Image, ImageTk
+import tkinter as tk
+from tkinter import Label, Frame, Button, messagebox
 
 class PhotoBooth:
     def __init__(self, window):
         self.window = window
         self._timer = 0
         self.photos = []
+        self.photo_paths = []
         self.filter_var = tk.StringVar(window)
         self.filter_var.set("Normal")
 
-        # initialize webcam capture
+        # Webcam start
         self.video = cv2.VideoCapture(0)
         if not self.video.isOpened():
-            messagebox.showerror("Webcam Error", "Cannot open webcam. Check camera and permissions.")
+            messagebox.showerror("Error", "Webcam tidak ditemukan!")
             window.destroy()
             return
 
+        # Folder save
         self.save_folder = r"C:\Users\ANINDYA\TugasAkhir\CapturedPhotos"
         os.makedirs(self.save_folder, exist_ok=True)
 
-        # ---------------- GUI TIMER LABEL ----------------
-        self.timer_label = Label(window, text="", font=("Arial", 26, "bold"), fg="purple", bg="#e8cdf7")
+        # UI
+        self.timer_label = Label(window, text="", font=("Arial", 26, "bold"),
+                                 fg="purple", bg="#e8cdf7")
         self.timer_label.pack()
 
-        # Webcam display
         self.label = Label(window, bg="#a5c9fe")
         self.label.pack(pady=10)
-    
-        # Gallery frame
+
         self.gallery_frame = Frame(window, bg="#e3b6ee")
         self.gallery_frame.pack(pady=10)
 
-        # ensure webcam is released when window closes
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
-
         self.update_frame()
 
-    # ---------------- Timer Property ----------------
+    # Timer
     @property
     def timer(self):
         return self._timer
@@ -52,104 +51,116 @@ class PhotoBooth:
         except:
             self._timer = 0
 
-    # ---------------- Webcam Loop ----------------
+    # Webcam Loop
     def update_frame(self):
-        if not hasattr(self, "video") or self.video is None:
-            return
-
         ret, frame = self.video.read()
         if ret:
             frame = self.apply_filter(frame, self.filter_var.get())
-
             img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             imgtk = ImageTk.PhotoImage(img)
             self.label.imgtk = imgtk
             self.label.configure(image=imgtk)
 
-        # schedule next frame
         self.window.after(10, self.update_frame)
 
-    # ---------------- START TIMER ----------------
+    # Start countdown
     def start_timer_capture(self):
-        t = self.timer
-
         def countdown(sec):
             if sec > 0:
-                self.timer_label.config(text=f"{sec}")
+                self.timer_label.config(text=str(sec))
                 self.window.after(1000, countdown, sec - 1)
             else:
                 self.timer_label.config(text="")
                 self.capture_photo()
 
-        countdown(t)
+        countdown(self.timer)
 
-    # ---------------- CAPTURE PHOTO ----------------
+    # Capture and SAVE
     def capture_photo(self):
-        if not hasattr(self, "video") or self.video is None:
+        ret, frame = self.video.read()
+        if not ret:
+            print("Frame not captured.")
             return
 
-        ret, frame = self.video.read()
-        if ret:
-            frame = self.apply_filter(frame, self.filter_var.get())
-            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            self.photos.append(img)
+        frame = self.apply_filter(frame, self.filter_var.get())
+        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-            # Save image
-            file_count = len(os.listdir(self.save_folder)) + 1
-            save_path = os.path.join(self.save_folder, f"photo_{file_count}.png")
-            img.save(save_path)
-            print(f"Foto tersimpan otomatis: {save_path}")
+        # AUTO-NUMBER FIX
+        existing = [
+            int(f.split("_")[1].split(".")[0])
+            for f in os.listdir(self.save_folder)
+            if f.startswith("photo_") and f.endswith(".png")
+        ]
 
-            self.display_photos()
+        next_id = max(existing) + 1 if existing else 1
+        save_path = os.path.join(self.save_folder, f"photo_{next_id}.png")
 
-    # ---------------- FILTERS ----------------
-    def apply_filter(self, frame, filter_name):
-        if filter_name == "Grayscale":
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        img.save(save_path)
+        print("Saved:", save_path)
 
-        elif filter_name == "Sepia":
-            frame = np.array(frame, dtype=np.float32)
-            sepia = np.array([
+        # Memory
+        self.photos.append(img)
+        self.photo_paths.append(save_path)
+
+        self.display_photos()
+
+    # Filters
+    def apply_filter(self, frame, name):
+        if name == "Grayscale":
+            g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)
+
+        elif name == "Sepia":
+            kernel = np.array([
                 [0.272, 0.534, 0.131],
                 [0.349, 0.686, 0.168],
                 [0.393, 0.769, 0.189]
             ])
-            frame = cv2.transform(frame, sepia)
-            frame = np.clip(frame, 0, 255).astype(np.uint8)
+            sepia = cv2.transform(frame.astype(np.float32), kernel)
+            return np.clip(sepia, 0, 255).astype(np.uint8)
 
         return frame
 
-    # ---------------- GALLERY ----------------
+    # Gallery display
     def display_photos(self):
-        for widget in self.gallery_frame.winfo_children():
-            widget.destroy()
+        for w in self.gallery_frame.winfo_children():
+            w.destroy()
 
         for idx, img in enumerate(self.photos):
             thumb = img.copy()
             thumb.thumbnail((160, 120))
             imgtk = ImageTk.PhotoImage(thumb)
 
-            frame = Frame(self.gallery_frame, bg="#ccc")
+            frame = Frame(self.gallery_frame, bg="#ccc", width=160, height=120)
             frame.grid(row=idx // 4, column=idx % 4, padx=5, pady=5)
+            frame.grid_propagate(False)
 
             lbl = Label(frame, image=imgtk)
             lbl.imgtk = imgtk
             lbl.pack()
 
-    # ---------------- CLEAR PHOTOS ----------------
-    def clear_photos(self):
-        self.photos = []
+            del_btn = Button(
+                frame, text="✕", fg="white", bg="#d9534f",
+                font=("Arial", 10, "bold"),
+                command=lambda i=idx: self.delete_photo(i),
+                bd=0
+            )
+            del_btn.place(relx=1, rely=0, anchor="ne")
+
+    # Delete photo
+    def delete_photo(self, index):
+        try:
+            self.photos.pop(index)
+            file_path = self.photo_paths.pop(index)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print("Deleted:", file_path)
+        except Exception as e:
+            print("Delete error:", e)
+
         self.display_photos()
 
-    # ---------------- CLEANUP ----------------
+    # Cleanup
     def on_close(self):
-        try:
-            if hasattr(self, "video") and self.video is not None:
-                self.video.release()
-        except Exception:
-            pass
-        try:
-            self.window.destroy()
-        except Exception:
-            pass
+        self.video.release()
+        self.window.destroy()

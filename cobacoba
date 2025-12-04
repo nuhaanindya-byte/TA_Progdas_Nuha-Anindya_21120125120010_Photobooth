@@ -1,0 +1,12 @@
+from PIL import Image
+import os
+
+save_folder = r"C:\Users\ANINDYA\TugasAkhir\CapturedPhotos"
+os.makedirs(save_folder, exist_ok=True)
+
+test_path = os.path.join(save_folder, "test_photo.png")
+
+img = Image.new("RGB", (200, 200), color="red")
+img.save(test_path)
+
+print("Saved to:", test_path)
